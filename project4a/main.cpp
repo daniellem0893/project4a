@@ -3,106 +3,49 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <semaphore.h>
+#include <iostream>
+#include <sstream>
 #include "buffer.h"
 
 using namespace std;
 
-/* Create Buffer */
 buffer_item buffer[BUFFER_SIZE];
 
-/* Semaphore and Mutex lock */
-sem_t cEmpty;
-sem_t cFull;
+sem_t empty;
+sem_t full;
 pthread_mutex_t mutex;
 
-/* Threads */
-pthread_t tid; /* Thread ID */
-pthread_attr_t attr; /* Thread attributes */
+int bufferCurrent;
 
-void *producer(void *param);
-void *consumer(void *param);
+void *producer(void *arguments);
+void *consumer(void *arguments);
 void init();
-
-/* Progress Counter */
-int cg;
-
-main(int argc, char *argv[])
-{
-  /* Variables */
-  int argarray[3], c1;
-
-  /* Argument counter checks */
-  if(argc != 4)
-  {
-    fprintf(stderr, "usage: main [sleep time] [# of producer threads] [# of consumer threads]\n");
-    return -1;
-  }
-
-  /* Get args from command line and change them into integers */
-  argarray[0] = atoi(argv[1]); /* How long to sleep before ending */
-  argarray[1] = atoi(argv[2]); /* Producer threads */
-  argarray[2] = atoi(argv[3]); /* Consumer threads */
-
-  /* Error check */
-  if(argarray[1]<1)
-  {
-    fprintf(stderr, "argument 2 must be > 0\n");
-    return -1;
-  }
-  if(argarray[2]<1)
-  {
-    fprintf(stderr, "argument 3 must be > 0\n");
-    return -1;
-  }
-
-  init();
-
-  /* Do actual work from this point forward */
-  /* Create the producer threads */
-  for(c1=1; c1<=argarray[1]; c1++)
-  {
-    pthread_create(&tid, &attr, producer, NULL);
-    printf("Creating producer #%d\n", c1);
-  }
-
-  /* Create the consumer threads */
-  for(c1=1; c1<=argarray[2]; c1++)
-  {
-    pthread_create(&tid, &attr, consumer, NULL);
-    printf("Creating consumer #%d\n", c1);
-  }
-
-  /* Ending it */
-  usleep(argarray[0]);
-
-  printf("Production complete.\n");
-  exit(0);
-}
 
 void init()
 {
-  int c2;
+  sem_init(&full, 0, 0);
+  sem_init(&empty, 0, BUFFER_SIZE);
+  pthread_mutex_init(&mutex, NULL);
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
 
-  pthread_mutex_init(&mutex, NULL); /* Initialize mutex lock */
-  pthread_attr_init(&attr); /* Initialize pthread attributes to default */
-  sem_init(&cFull, 0, 0); /* Initialize full semaphore */
-  sem_init(&cEmpty, 0, BUFFER_SIZE); /* Initialize empty semaphore */
-  cg = 0; /* Initialize global counter */
-  for(c2=0;c2<BUFFER_SIZE;c2++) /* Initialize buffer */
+  bufferCurrent = 0;
+
+  for(int temp = 0; temp<BUFFER_SIZE; temp++)
   {
-    buffer[c2] = 0;
+    buffer[temp] = 0;
   }
 }
 
 int insert_item(buffer_item item)
 {
-  if(cg < BUFFER_SIZE) /* Buffer has space */
+  if(bufferCurrent < BUFFER_SIZE)
   {
-    buffer[cg] = item;
-    cg++;
+    buffer[bufferCurrent] = item;
+    bufferCurrent++;
     return 0;
   }
-  else /* Buffer full */
+  else
   {
     return -1;
   }
@@ -110,64 +53,144 @@ int insert_item(buffer_item item)
 
 int remove_item(buffer_item *item)
 {
-  if(cg > 0) /* Buffer has something in it */
+  if(bufferCurrent > 0)
   {
-    *item = buffer[(cg-1)];
-    cg--;
+    *item = buffer[(bufferCurrent-1)];
+    bufferCurrent--;
     return 0;
   }
-  else /* Buffer empty */
+  else
   {
     return -1;
   }
 }
 
-void *producer(void *param)
+void *producer(void *arguments)
 {
-  /* Variables */
   buffer_item item;
 
   while(1)
   {
     usleep(rand());
-    item = (rand()); /* Generates random item */
+    item = (rand());
 
-    sem_wait(&cEmpty); /* Lock empty semaphore if not zero */
+    sem_wait(&empty);
     pthread_mutex_lock(&mutex);
 
-    if(insert_item(item))
+    int temp = insert_item(item);
+    if(temp != 0)
     {
-      fprintf(stderr, "Producer error.");
-    }
-    else
-    {
-      printf("Producer produced %d\n", item);
+       cout << "Insert failed" << endl;
     }
 
     pthread_mutex_unlock(&mutex);
-    sem_post(&cFull); /* Increment semaphore for # of full */
+    sem_post(&full);
   }
+  return 0;
 }
 
-void *consumer(void *param)
+void *consumer(void *arguments)
 {
   buffer_item item;
 
   while(1)
   {
     usleep(rand());
-    sem_wait(&cFull); /* Lock empty semaphore if not zero */
+    sem_wait(&full);
     pthread_mutex_lock(&mutex);
-    if(remove_item(&item))
+
+    int temp = remove_item(&item);
+    if(temp != 0)
     {
-      fprintf(stderr, "Consumer error.");
-    }
-    else
-    {
-      printf("Consumer consumed %d\n", item);
+       cout << "Removal failed" << endl;
     }
 
     pthread_mutex_unlock(&mutex);
-    sem_post(&cEmpty); /* Increments semaphore for # of empty */
+    sem_post(&empty);
   }
+
+  return 0;
+}
+
+
+int main(int argc, char *argv[])
+{
+
+
+
+  int sleepTime;
+  int numProducers;
+  int numConsumers;
+
+/*
+  if(argc != 4)
+  {
+    cout << "Please enter the sleep time, number of producer threads, and number of consumer threads when executing." << endl;
+    return -1;
+  }
+
+
+  int temp;
+  istringstream ss(argv[1]);
+  ss >> temp;
+  sleepTime = temp;
+
+  istringstream ss2(argv[2]);
+  ss2 >> temp;
+  numProducers = temp;
+
+  istringstream ss3(argv[3]);
+  ss3 >> temp;
+  numConsumers = temp;
+  */
+
+  sleepTime = 10;
+  numProducers = 10;
+  numConsumers = 10;
+
+  cout << "Established values" << endl;
+
+  init();
+
+  cout << "Finished initilization" << endl;
+
+  int rc;
+  int i;
+  pthread_t prodThreads[numProducers];
+  pthread_t consThreads[numConsumers];
+  pthread_attr_t attr;
+  void *status;
+
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+  for( i=0; i < numProducers; i++ )
+  {
+      rc = pthread_create(&prodThreads[i], NULL, &producer, NULL);
+      if (rc)
+      {
+         cout << "Error:unable to create thread," << rc << endl;
+         exit(-1);
+      }
+   }
+
+   cout << "Created Producers" << endl;
+
+   for( i=0; i < numConsumers; i++ )
+  {
+      rc = pthread_create(&consThreads[i], NULL, &consumer, NULL);
+      if (rc)
+      {
+         cout << "Error:unable to create thread," << rc << endl;
+         exit(-1);
+      }
+   }
+
+  cout << "Created Consumers" << endl;
+
+  pthread_attr_destroy(&attr);
+
+  usleep(sleepTime);
+
+  cout << "Finished." << endl;
 }
