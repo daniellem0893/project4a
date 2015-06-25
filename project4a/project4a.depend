@@ -1,0 +1,11 @@
+# depslib dependency file v1.0
+1435247542 source:/home/dmartin6/OS/project4a/main.cpp
+	<pthread.h>
+	<stdio.h>
+	<stdlib.h>
+	<unistd.h>
+	<semaphore.h>
+	"buffer.h"
+
+1435246623 /home/dmartin6/OS/project4a/buffer.h
+
